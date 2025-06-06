@@ -1,0 +1,10 @@
+-e git+https://github.com/aleingrosso/OpenABM-Covid19.git@81f1128b1b20507ae37b7e0d03f2dd65e1f20add#egg=covid19&subdirectory=src
+matplotlib==3.10.3
+numba==0.61.2
+numpy==2.2.6
+pandas==2.3.0
+pexpect==4.9.0
+pgmpy==1.0.0
+pytest==8.3.4
+scipy==1.15.3
+tqdm==4.67.1
