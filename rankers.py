@@ -58,7 +58,7 @@ class RandomRanker(BaseRanker):
 
 
     def rank(self, t, data):
-        self.rng.shuffle(self._indices)
+        #self.rng.shuffle(self._indices)
         return self._indices
 
 
@@ -95,7 +95,7 @@ class CTRanker(BaseRanker):
         counts = np.zeros(self.N, dtype=float)
 
         for (i, j, _, w) in self.contact_buffer:
-            # We only care about “i contacted j” if j ∈ recent_positives.
+            # We only care about “i contacted j” if j in recent_positives.
             if j in recent_positives:
                 counts[i] += 1
 

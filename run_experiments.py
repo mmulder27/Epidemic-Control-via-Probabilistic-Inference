@@ -6,7 +6,7 @@ Figures for each batch appear in ./output/<run_id>/.
 
 # ── Imports ─────────────────────────────────────────────────────────────
 import matplotlib
-matplotlib.use("Agg")              # no GUI
+#matplotlib.use("Agg")              # no GUI
 
 import matplotlib.pyplot as plt
 import plot_utils
@@ -19,7 +19,7 @@ from abm_utils import free_abm, loop_abm
 from rankers   import RandomRanker, CTRanker, MFRanker, BPRanker
 
 # ── Base config ─────────────────────────────────────────────────────────
-N, T               = 500000, 100
+N, T               = 50000, 100
 initial_steps      = 10
 num_test_random    = 0                         # fixed
 fraction_SM_obs    = 0.5
@@ -31,12 +31,13 @@ fp_rate            = 0.0
 fn_rate            = 0.0
 seed               = 1                         # kept constant
 n_seed_infection   = 3                         # unused here but preserved
+patient_zeroes     = 50
 
 # ── Rankers ─────────────────────────────────────────────────────────────
 rankers = {
     "None": None,
     "RG"  : RandomRanker(),
-    "CT"  : CTRanker(),
+    #"CT"  : CTRanker(),
     #"MF"  : MFRanker(),
     #"BP"  : BPRanker(),
 }
@@ -72,7 +73,7 @@ for num_test_algo in test_algo_values:
     for name, rk in rankers.items():
         print(f"   • {name}")
         if rk is None:
-            data = free_abm({}, logger=root_logger)
+            data = free_abm({}, N=N, T=T, logger=root_logger, patient_zeroes= patient_zeroes)
         else:
             data = loop_abm(
                 params={},
@@ -93,6 +94,7 @@ for num_test_algo in test_algo_values:
                 fp_rate=fp_rate,
                 fn_rate=fn_rate,
                 name_file_res=f"{name}_{run_id}",
+                patient_zeroes= patient_zeroes
             )
         results[name] = data
 
@@ -116,6 +118,7 @@ for num_test_algo in test_algo_values:
     plt.ylabel("Infected"); plt.xlabel("Days"); plt.legend(); plt.xlim(0, T)
     plt.tight_layout()
     plt.savefig(out_dir / f"infections_{run_id}.png", dpi=300)
+    plt.show()
     plt.close()
 
     # Light breather so the OS can flush I/O

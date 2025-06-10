@@ -8,21 +8,22 @@ import logging
 import pickle
 
 
-def status_to_state(status_array):
-    """
-    Convert OpenABM status codes to simplified SIR states. We assume:
-    0         -> 0 (susceptible)
-    1 to 5    -> 1 (infected)
-    >=6       -> 2 (recovered)
-    """
-    state = np.zeros_like(status_array)
-    state[(status_array > 0) & (status_array < 6)] = 1
-    state[status_array >= 6] = 2
-    return state
+def status_to_state_(status):
+    return ((status > 0) and (status < 6)) + 2 * (status >=6)
 
+status_to_state = np.vectorize(status_to_state_)
+
+def listofhouses(houses):
+    housedict = {house_no : [] for house_no in np.unique(houses)}
+    for i in range(len(houses)):
+        housedict[houses[i]].append(i)
+    return housedict
 
 def free_abm(params,
+             N,
+             T,
              logger = None,
+             patient_zeroes = 50,
              input_parameter_file = None,
              household_demographics_file = None,
              parameter_line_number = 1,
@@ -64,22 +65,27 @@ def free_abm(params,
 
     for k, val in params.items():
         params_model.set_param(k, val)
-    params_model.set_param("n_seed_infection", 50)
+    params_model.set_param("end_time", T)
+    params_model.set_param("n_total", N)
+    params_model.set_param("n_seed_infection", patient_zeroes)
 
 
     model = simulation.COVID19IBM(model=Model(params_model))
     T = params_model.get_param("end_time")
     N = params_model.get_param("n_total")
-    
-
+    print(N)
 
     sim = simulation.Simulation(env=model, end_time=T, verbose=False)
+    
 
     for col_name in ["I", "IR"]:
         data[col_name] = np.full(T, np.nan)
+    
 
     for t in range(T):
         sim.steps(1)
+        sim.collect_results = lambda state, action: None
+        print(f"Step: {t}")
         status = np.array(covid19.get_state(model.model.c_model))
         state = status_to_state(status)
         nS, nI, nR = (state == 0).sum(), (state == 1).sum(), (state == 2).sum()
@@ -94,17 +100,19 @@ def free_abm(params,
         callback(data)
 
     # Save outputs
-    sim.env.model.write_individual_file()
-    individual_file = output_dir / "individual_file_Run1.csv"
-    df_indiv = pd.read_csv(individual_file, skipinitialspace=True)
-    df_indiv.to_csv(output_dir / f"{name_file_res}_individuals.gz")
+    # sim.env.model.write_individual_file()
+    # individual_file = output_dir / "individual_file_Run1.csv"
+    # df_indiv = pd.read_csv(individual_file, skipinitialspace=True)
+    # df_indiv.to_csv(output_dir / f"{name_file_res}_individuals.gz")
 
-    sim.env.model.write_transmissions()
-    transmission_file = output_dir / "transmission_Run1.csv"
-    df_trans = pd.read_csv(transmission_file)
-    df_trans.to_csv(output_dir / f"{name_file_res}_transmissions.gz")
+    # sim.env.model.write_transmissions()
+    # transmission_file = output_dir / "transmission_Run1.csv"
+    # df_trans = pd.read_csv(transmission_file)
+    # df_trans.to_csv(output_dir / f"{name_file_res}_transmissions.gz")
 
     print("End of Simulation")
+    sim.results.clear()
+    sim.results_all_simulations.clear()
     return data
 
 
@@ -133,7 +141,8 @@ def loop_abm(params,
              fn_rate=0.0,
              smartphone_users_abm=False,
              callback=lambda x: None,
-             data=None):
+             data=None,
+             patient_zeroes = 50):
     
 
     if logger is None:
@@ -170,20 +179,20 @@ def loop_abm(params,
 
     params_model.set_param("end_time", T)
     params_model.set_param("n_total", N)
-    params_model.set_param("n_seed_infection", 50)
+    params_model.set_param("n_seed_infection", patient_zeroes)
 
     rng = np.random.RandomState(seed)
     model = simulation.COVID19IBM(model=Model(params_model))
     sim = simulation.Simulation(env=model, end_time=T, verbose=False)
 
     houses = covid19.get_house(model.model.c_model)
-    housedict = {h: list(np.where(houses == h)[0]) for h in np.unique(houses)}
+    housedict = listofhouses(houses)
 
     has_app = covid19.get_app_users(model.model.c_model) if smartphone_users_abm else np.ones(N, dtype=int)
     has_app &= (rng.random(N) <= adoption_fraction)
 
     inference_algorithm.init(N, T)
-
+    print(N)
     indices = np.arange(N)
     excluded = np.zeros(N, dtype=bool)
     noise_SM = rng.random(N)
@@ -209,9 +218,11 @@ def loop_abm(params,
     num_quarantined = fp_num = fn_num = p_num = n_num = freebirds = 0
     daily_obs = []
     nfree = params_model.get_param("n_seed_infection")
-
+    print("ran1")
     for t in range(T):
         sim.steps(1)
+        sim.collect_results = lambda state, action: None
+        print(f"Step: {t}")
         status = np.array(covid19.get_state(model.model.c_model))
         state = status_to_state(status)
 
@@ -340,21 +351,23 @@ def loop_abm(params,
 
         callback(data)
 
-        if t % save_every_iter == 0:
-            pd.DataFrame.from_dict(data).to_csv(output_dir / f"{name_file_res}_res.gz")
+    #     if t % save_every_iter == 0:
+    #         pd.DataFrame.from_dict(data).to_csv(output_dir / f"{name_file_res}_res.gz")
 
-    pd.DataFrame.from_dict(data).to_csv(output_dir / f"{name_file_res}_res.gz")
-    with open(output_dir / f"{name_file_res}_states.pkl", "wb") as f_states:
-        pickle.dump(data_states, f_states)
+    # pd.DataFrame.from_dict(data).to_csv(output_dir / f"{name_file_res}_res.gz")
+    # with open(output_dir / f"{name_file_res}_states.pkl", "wb") as f_states:
+    #     pickle.dump(data_states, f_states)
 
-    sim.env.model.write_individual_file()
-    df_indiv = pd.read_csv(output_dir / "individual_file_Run1.csv", skipinitialspace=True)
-    df_indiv.to_csv(output_dir / f"{name_file_res}_individuals.gz")
+    # sim.env.model.write_individual_file()
+    # df_indiv = pd.read_csv(output_dir / "individual_file_Run1.csv", skipinitialspace=True)
+    # df_indiv.to_csv(output_dir / f"{name_file_res}_individuals.gz")
 
-    sim.env.model.write_transmissions()
-    df_trans = pd.read_csv(output_dir / "transmission_Run1.csv")
-    df_trans.to_csv(output_dir / f"{name_file_res}_transmissions.gz")
+    # sim.env.model.write_transmissions()
+    # df_trans = pd.read_csv(output_dir / "transmission_Run1.csv")
+    # df_trans.to_csv(output_dir / f"{name_file_res}_transmissions.gz")
 
     print("End of Intervention Simulation")
+    sim.results.clear()
+    sim.results_all_simulations.clear()
     return data
 
