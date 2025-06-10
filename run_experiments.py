@@ -18,8 +18,18 @@ from pathlib import Path
 from abm_utils import free_abm, loop_abm
 from rankers   import RandomRanker, CTRanker, MFRanker, BPRanker
 
+import json
+import numpy as np
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
 # ── Base config ─────────────────────────────────────────────────────────
-N, T               = 50000, 100
+# N, T               = 500000, 100
+N, T               = 100000, 100
 initial_steps      = 10
 num_test_random    = 0                         # fixed
 fraction_SM_obs    = 0.5
@@ -37,8 +47,8 @@ patient_zeroes     = 50
 rankers = {
     "None": None,
     "RG"  : RandomRanker(),
-    #"CT"  : CTRanker(),
-    #"MF"  : MFRanker(),
+    "CT"  : CTRanker(),
+    "MF"  : MFRanker(),
     #"BP"  : BPRanker(),
 }
 
@@ -55,7 +65,7 @@ root_logger = logging.getLogger("ranker")
 root_logger.propagate = False
 
 # ── Batch values (the only thing that changes) ──────────────────────────
-test_algo_values = [5000]
+test_algo_values = [100000]
 
 # ── Main loop ───────────────────────────────────────────────────────────
 for num_test_algo in test_algo_values:
@@ -75,6 +85,7 @@ for num_test_algo in test_algo_values:
         if rk is None:
             data = free_abm({}, N=N, T=T, logger=root_logger, patient_zeroes= patient_zeroes)
         else:
+            t1 = time.time_ns()
             data = loop_abm(
                 params={},
                 N=N, T=T,
@@ -96,7 +107,20 @@ for num_test_algo in test_algo_values:
                 name_file_res=f"{name}_{run_id}",
                 patient_zeroes= patient_zeroes
             )
+            t2 = time.time_ns()
+            data["time"] = (t2 - t1) / 1e9
+            print(f"   • {name} took {data['time']:.4f} s")
         results[name] = data
+        if "logger" in data:
+            del data["logger"]
+        with open(f"results/{name}_{num_test_algo}.json", 'w') as f:
+            json.dump(data, f, cls=NumpyEncoder)
+
+    with open(f"results/results.json", 'w') as f:
+        json.dump(results, f, cls=NumpyEncoder)
+
+    with open('results/results.json', 'r') as f:
+        results = json.load(f)
 
     # Populate grid and save
     for pt in plots:
@@ -109,11 +133,14 @@ for num_test_algo in test_algo_values:
     plt.close(fig)
 
     # Quick semilog infected plot
+    
     plt.figure()
     to_plot = "I"
     palette = ["tab:red", "tab:grey", "tab:purple", "tab:green", "tab:orange"]
     for name, color in zip(rankers, palette):
         plt.plot(results[name][to_plot], label=name, color=color)
+        # print(f"results {results[name][to_plot]}")
+        # print(f"length {len(results[name][to_plot])}")
     plt.semilogy()
     plt.ylabel("Infected"); plt.xlabel("Days"); plt.legend(); plt.xlim(0, T)
     plt.tight_layout()
