@@ -45,11 +45,11 @@ patient_zeroes     = 50
 
 # ── Rankers ─────────────────────────────────────────────────────────────
 rankers = {
-    "None": None,
-    "RG"  : RandomRanker(),
-    "CT"  : CTRanker(),
-    "MF"  : MFRanker(),
-    #"BP"  : BPRanker(),
+    # "None": None,
+    # "RG"  : RandomRanker(),
+    # "CT"  : CTRanker(),
+    # "MF"  : MFRanker(),
+    "BP"  : BPRanker(),
 }
 
 # ── Logging (single file) ───────────────────────────────────────────────
@@ -65,7 +65,9 @@ root_logger = logging.getLogger("ranker")
 root_logger.propagate = False
 
 # ── Batch values (the only thing that changes) ──────────────────────────
-test_algo_values = [100000]
+# test_algo_values = [100]
+# test_algo_values = [1000]
+test_algo_values = [5000]
 
 # ── Main loop ───────────────────────────────────────────────────────────
 for num_test_algo in test_algo_values:

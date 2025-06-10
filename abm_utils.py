@@ -244,12 +244,8 @@ def loop_abm(params,
         logger.info(f"time: {t}")
         import time
 
-        t1 = time.time_ns()
         daily_contacts = covid19.get_contacts_daily(model.model.c_model, t)
-        t2 = time.time_ns()
         weighted_contacts = [(c[0], c[1], c[2], 2.0 if c[3] == 0 else 1.0) for c in daily_contacts if has_app[c[0]] and has_app[c[1]]]
-        t3 = time.time_ns()
-        print(f"Contacts for day {t} retrieved in {(t2 - t1) / 1e6:.2f} ms, weighted contacts in {(t3 - t2) / 1e6:.2f} ms")
 
 
         if fp_rate or fn_rate:
