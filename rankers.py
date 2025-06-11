@@ -307,6 +307,35 @@ def mf_step_energy_safe(P, Λ_t, mu, λ_max=0.20, min_log=-700.0):
 
     return np.column_stack((pS_next, pI_next, pR_next))
 
+
+def compute_elbo(P,Λ_t):
+    """
+    Parameters
+    ----------
+    P      : (N,3) array  -- today's [S,I,R] probabilities
+    Λ_t    : csr_matrix   -- Λ_t[i, j] = *uncapped* (λ_base * weight) for day t
+    """
+    # P: (N,3) array, P[:,1]=q_I, P[:,0]=q_S
+    qI = P[:,1]
+    qS = P[:,0]
+
+    # Λ_t: csr_matrix
+    rows, cols = Λ_t.nonzero()
+    lmb = Λ_t.data  # shape (M,)
+
+    # Energy:
+    E = np.sum(qI[rows] * qS[cols] * np.log1p(-lmb)) + np.sum(qI[cols] * qS[rows] * np.log1p(-lmb))
+
+    # Entropy:
+    # add a tiny eps to P before log to avoid log(0)
+    eps = 1e-12
+    H = -np.sum(P * np.log(P + eps))
+
+    # ELBO up to const:
+    elbo = E + H  # minus A(theta) if you can compute or approximate it
+    return elbo
+
+
 # ───────────────────────── ranker skeleton ───────────────────────────────
 class MFRanker(BaseRanker):
     """
@@ -321,6 +350,7 @@ class MFRanker(BaseRanker):
         self.rng = np.random.default_rng(seed)
         self.fnr = fnr
         self.fpr = fpr
+        self.all_elbos = {}
 
     def init(self, N, T, **kw):
         self.N, self.T = int(N), int(T)
@@ -371,6 +401,7 @@ class MFRanker(BaseRanker):
         # initialize slice
         P = np.zeros((self.N, 3)); P[:, 0] = 1.
         #t_inf_est = np.full(self.N, None, dtype=object)
+        iteration_elbos = [P]
 
         for day in range(start, t_day + 1):
 
@@ -394,6 +425,9 @@ class MFRanker(BaseRanker):
 
             # propagate
             P = mf_step_energy_safe(P, Λ_t, self.mu, λ_max=self.λ_max)
+
+            iteration_elbos.append(compute_elbo(P,Λ_t))
+        self.all_elbos[t_day] = iteration_elbos
 
         return np.argsort(P[:, 1])[::-1]
     

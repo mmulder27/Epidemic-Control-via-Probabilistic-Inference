@@ -29,7 +29,7 @@ class NumpyEncoder(json.JSONEncoder):
 
 # ── Base config ─────────────────────────────────────────────────────────
 # N, T               = 100000, 100
-N, T               = 10000, 100
+N, T               = 5000, 100
 initial_steps      = 10
 num_test_random    = 0                         # fixed
 fraction_SM_obs    = 0.5
@@ -45,12 +45,12 @@ patient_zeroes     = 10
 
 # ── Rankers ─────────────────────────────────────────────────────────────
 rankers = {
-    # "None": None,
-    # "RG"  : RandomRanker(),
-    # "CT"  : CTRanker(),
-    # "LinMF" : SMFRanker(),
-    # "MF"  : MFRanker(),
-    "BP"  : BPRanker(),
+    "None": None,
+    "RG"  : RandomRanker(),
+    "CT"  : CTRanker(),
+    "LinMF" : SMFRanker(),
+    "MF"  : MFRanker(),
+    #"BP"  : BPRanker(),
 }
 
 # ── Logging (single file) ───────────────────────────────────────────────
