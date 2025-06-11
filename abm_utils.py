@@ -5,7 +5,6 @@ from COVID19.model import Model, Parameters
 import COVID19.simulation as simulation
 from pathlib import Path
 import logging
-import pickle
 
 
 def status_to_state_(status):
@@ -68,6 +67,7 @@ def free_abm(params,
     params_model.set_param("end_time", T)
     params_model.set_param("n_total", N)
     params_model.set_param("n_seed_infection", patient_zeroes)
+    print(params_model)
 
 
     model = simulation.COVID19IBM(model=Model(params_model))
@@ -97,22 +97,16 @@ def free_abm(params,
         logger.info(f'time: {t}')
         data["I"][t] = nI
         data["IR"][t] = nI + nR
-        callback(data)
-
-    # Save outputs
-    # sim.env.model.write_individual_file()
-    # individual_file = output_dir / "individual_file_Run1.csv"
-    # df_indiv = pd.read_csv(individual_file, skipinitialspace=True)
-    # df_indiv.to_csv(output_dir / f"{name_file_res}_individuals.gz")
-
-    # sim.env.model.write_transmissions()
-    # transmission_file = output_dir / "transmission_Run1.csv"
-    # df_trans = pd.read_csv(transmission_file)
-    # df_trans.to_csv(output_dir / f"{name_file_res}_transmissions.gz")
 
     print("End of Simulation")
-    sim.results.clear()
-    sim.results_all_simulations.clear()
+    # sim.results.clear()
+    # sim.results_all_simulations.clear()
+    # sim.env.model = None     # drop the COVID19IBM → Model
+    # sim.env    = None 
+    # del sim
+    # del model
+    # del params_model
+    # gc.collect()
     return data
 
 
@@ -204,22 +198,11 @@ def loop_abm(params,
     noise_SM = rng.random(N)
     noise_SS = rng.random(N) if fraction_SS_obs < 1 else None
 
-    data_states = {
-        "true_conf": np.zeros((T, N)),
-        "statuses": np.zeros((T, N)),
-        "tested_algo": [],
-        "tested_random": [],
-        "tested_SS": [],
-        "tested_SM": []
-    }
 
-    metrics = ["num_quarantined", "q_SS", "q_SM", "q_algo", "q_random", "infected_free", 
-               "S", "I", "R", "IR", "aurI", "prec1%", "prec5%", 
-               "test_+", "test_-", "test_f+", "test_f-"]
-    for key in metrics:
-        data[key] = np.full(T, np.nan)
+    for col_name in ["I", "IR"]:
+        data[col_name] = np.full(T, np.nan)
 
-    data["logger"] = logger
+    #data["logger"] = logger
 
     num_quarantined = fp_num = fn_num = p_num = n_num = freebirds = 0
     daily_obs = []
@@ -233,8 +216,6 @@ def loop_abm(params,
         state = status_to_state(status)
 
         nS, nI, nR = (state == 0).sum(), (state == 1).sum(), (state == 2).sum()
-        data_states["true_conf"][t] = state
-        data_states["statuses"][t] = status
 
         if nI == 0 and stop_zero_I:
             logger.info("stopping simulation as there are no more infected individuals")
@@ -245,7 +226,10 @@ def loop_abm(params,
         import time
 
         daily_contacts = covid19.get_contacts_daily(model.model.c_model, t)
-        weighted_contacts = [(c[0], c[1], c[2], 2.0 if c[3] == 0 else 1.0) for c in daily_contacts if has_app[c[0]] and has_app[c[1]]]
+        t2 = time.time_ns()
+        weighted_contacts = [(c[0], c[1], t, 2.0 if c[3] == 0 else 1.0) for c in daily_contacts if has_app[c[0]] and has_app[c[1]]]
+        t3 = time.time_ns()
+        #print(f"Contacts for day {t} retrieved in {(t2 - t1) / 1e6:.2f} ms, weighted contacts in {(t3 - t2) / 1e6:.2f} ms")
 
 
         if fp_rate or fn_rate:
@@ -262,7 +246,6 @@ def loop_abm(params,
         def test_and_quarantine(rank, num):
             nonlocal to_quarantine, excluded_now, all_test, fp_today, fn_today, p_today, n_today
             selected = []
-            #print(len(rank))
             for i in rank:
                 if len(selected) >= num:
                     break
@@ -292,22 +275,15 @@ def loop_abm(params,
         else:
             num_test_algo_today = num_test_algo
 
-        inference_algorithm.update_history(weighted_contacts, daily_obs, t)
 
         if (nfree == 0 and quarantine_HH) or t < initial_steps:
+            inference_algorithm.update_history(weighted_contacts, daily_obs, t)
             rank = np.random.permutation(N).tolist()
+            continue
         else:
-            rank = inference_algorithm.rank(t, data)
+            rank = inference_algorithm.rank(t, weighted_contacts, daily_obs, data)
 
         test_algo = test_and_quarantine(rank, num_test_algo_today)
-
-
-        #status_t = np.asarray(data_states["true_conf"][t])
-        #indices2 = np.where(~excluded)[0]              # eligible individuals
-        #labels = (status_t[indices2] == 1).astype(int) # 1 if infected, else 0
-        #eventsI = list(zip(indices2, [t] * len(indices), labels))
-
-        # _, yI, aurI, _ = roc_curve(dict(rank_algo), eventsI, lambda x: x)
 
         SS = indices[(status == 4) & (noise_SS < fraction_SS_obs)] if fraction_SS_obs < 1 else indices[status == 4]
         SM = indices[(status == 5) & (noise_SM < fraction_SM_obs)]
@@ -317,39 +293,19 @@ def loop_abm(params,
         test_random = test_and_quarantine(rng.permutation(N), num_test_random)
 
         num_quarantined += len(to_quarantine)
+        print(to_quarantine)
+        #q_list = [int(x) for x in np.asarray(to_quarantine).ravel() if x >= 0]
+        #covid19.intervention_quarantine_list(model.model.c_model, q_list, T+1)
         covid19.intervention_quarantine_list(model.model.c_model, to_quarantine, T + 1)
 
-        daily_obs = [(i, f_state[i], t) for i in all_test]
+        daily_obs = [(i, f_state[i], t-1) for i in all_test]
         excluded[[i for i, result, _ in daily_obs if result == 2]] = True
 
-        data_states["tested_algo"].append(test_algo)
-        data_states["tested_random"].append(test_random)
-        data_states["tested_SS"].append(SS)
-        data_states["tested_SM"].append(SM)
-
-        data["S"][t], data["I"][t], data["R"][t] = nS, nI, nR
+        data["I"][t] = nI
         data["IR"][t] = nI + nR
-        #data["aurI"][t] = aurI
-        #prec = lambda f: yI[int(f/100*len(yI))]/int(f/100*len(yI)) if len(yI) else np.nan
+    
         ninfq = sum(state[i] > 0 for i in to_quarantine)
         nfree = int(nI - sum(excluded[state == 1]))
-        #data["prec1%"][t] = prec(1)
-        #data["prec5%"][t] = prec(5)
-        data["num_quarantined"][t] = num_quarantined
-        data["test_+"][t] = p_num
-        data["test_-"][t] = n_num
-        data["test_f+"][t] = fp_num
-        data["test_f-"][t] = fn_num
-        data["q_SS"][t] = len(SS)
-        data["q_SM"][t] = len(SM)
-        data["q_algo"][t] = sum(state[i] == 1 for i in test_algo)
-        data["q_random"][t] = sum(state[i] == 1 for i in test_random)
-        data["infected_free"][t] = nfree
-
-        logger.info(f"True  : (S,I,R): ({nS:.1f}, {nI:.1f}, {nR:.1f})")
-        #logger.info(f"AUR_I : {aurI:.3f}, prec(1%): {prec(1):.2f}, prec(5%): {prec(5):.2f}")
-        logger.info(f"Tested algo (I): {data['q_algo'][t]}, random (I): {data['q_random'][t]}")
-        logger.info(f"Free infected: {nfree}, Quarantined: {len(to_quarantine)}, Found: {ninfq}")
 
         fp_num += fp_today
         fn_num += fn_today
@@ -357,25 +313,13 @@ def loop_abm(params,
         n_num += n_today
         freebirds = nfree
 
-        callback(data)
-
-    #     if t % save_every_iter == 0:
-    #         pd.DataFrame.from_dict(data).to_csv(output_dir / f"{name_file_res}_res.gz")
-
-    # pd.DataFrame.from_dict(data).to_csv(output_dir / f"{name_file_res}_res.gz")
-    # with open(output_dir / f"{name_file_res}_states.pkl", "wb") as f_states:
-    #     pickle.dump(data_states, f_states)
-
-    # sim.env.model.write_individual_file()
-    # df_indiv = pd.read_csv(output_dir / "individual_file_Run1.csv", skipinitialspace=True)
-    # df_indiv.to_csv(output_dir / f"{name_file_res}_individuals.gz")
-
-    # sim.env.model.write_transmissions()
-    # df_trans = pd.read_csv(output_dir / "transmission_Run1.csv")
-    # df_trans.to_csv(output_dir / f"{name_file_res}_transmissions.gz")
 
     print("End of Intervention Simulation")
-    sim.results.clear()
-    sim.results_all_simulations.clear()
+    # sim.results.clear()
+    # sim.results_all_simulations.clear()
+    # del sim
+    # del model
+    # del params_model
+    # gc.collect()
     return data
 
