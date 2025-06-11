@@ -45,11 +45,11 @@ patient_zeroes     = 10
 
 # ── Rankers ─────────────────────────────────────────────────────────────
 rankers = {
-    "None": None,
-    "RG"  : RandomRanker(),
-    "CT"  : CTRanker(),
-    "SMF" : SMFRanker(),
-    "MF"  : MFRanker(),
+    # "None": None,
+    # "RG"  : RandomRanker(),
+    # "CT"  : CTRanker(),
+    # "LinMF" : SMFRanker(),
+    # "MF"  : MFRanker(),
     "BP"  : BPRanker(),
 }
 

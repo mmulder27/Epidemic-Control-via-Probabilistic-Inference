@@ -524,23 +524,23 @@ class BPRanker(BaseRanker):
 
         # 4. pair factors for *today’s* contacts
         #print(self.contact_buffer[-1])
-        Λ_t = contacts_to_csr(
-            self.N,
-            [(i, j, w) for i, j, _, w in self.contact_buffer],
-            day=t_day,
-            lam=self.lam,
-            λ_max=self.λ_max
-        )
+        # Λ_t = contacts_to_csr(
+        #     self.N,
+        #     [(i, j, w) for i, j, _, w in self.contact_buffer],
+        #     day=t_day,
+        #     lam=self.lam,
+        #     λ_max=self.λ_max
+        # )
 
-        rows, cols = Λ_t.nonzero()
+        # rows, cols = Λ_t.nonzero()
         seen = set()
-        for i, j in zip(rows, cols):
+        for i, j, _, w in self.contact_buffer:
             if (i, j) in seen or (j, i) in seen:       # avoid duplicates
                 continue
             seen.add((i, j))
 
-            λ_ji = float(Λ_t[i, j])
-            λ_ij = float(Λ_t[j, i])
+            λ_ji = float(self.lam * w)
+            λ_ij = λ_ji
 
             table = np.array([
                 1.0, 1.0 - λ_ji, 1.0,   # x_i = S

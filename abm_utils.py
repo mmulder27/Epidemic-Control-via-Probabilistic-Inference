@@ -278,7 +278,9 @@ def loop_abm(params,
 
         if (nfree == 0 and quarantine_HH) or t < initial_steps:
             inference_algorithm.update_history(weighted_contacts, daily_obs, t)
-            rank = np.random.permutation(N).tolist()
+            data["I"][t] = nI
+            data["IR"][t] = nI + nR
+            #rank = np.random.permutation(N).tolist()
             continue
         else:
             rank = inference_algorithm.rank(t, weighted_contacts, daily_obs, data)
